@@ -21,6 +21,7 @@ Processed runs are recorded in a **JSON state file** keyed by PipelineRun UID so
 - A reachable **Llama Stack** HTTP endpoint and a **model** id (or rely on the first model returned by the stack).
 - **MCP tool groups** registered with that stack (e.g. Kubernetes + GitHub), with IDs that match `FIXER_TOOL_GROUP_IDS`.
 - **RBAC** for the pod’s `ServiceAccount`: `get/list/watch` on `pipelineruns`, `taskruns`, `pods`, and `pods/log` in the namespace you watch (see `deploy/openshift.yaml`).
+- This Agent is designed to monitor the Pipelines of a specific app, redhat-screensaver. See its source code, Pipeline, etc. for reference: https://github.com/earvonen/redhat-screensaver.git
 
 ## Install and run (local)
 
