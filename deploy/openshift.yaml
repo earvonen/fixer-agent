@@ -40,6 +40,8 @@ data:
   # Optional: require Pipeline CR in this namespace (defaults to pipelineRef.namespace or PipelineRun ns)
   # FIXER_PIPELINE_NAMESPACE: "shared-tekton"
   FIXER_POLL_INTERVAL_SECONDS: "120"
+  # Optional: only handle failures that finished within the last N seconds (UTC completionTime)
+  # FIXER_MAX_COMPLETION_AGE_SECONDS: "86400"
   FIXER_STATE_FILE: "/var/lib/fixer-agent/state.json"
   FIXER_WORKSPACE_ROOT: "/var/lib/fixer-agent/workspaces"
   LLAMA_STACK_BASE_URL: "http://llamastack-service:8321"

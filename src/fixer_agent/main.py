@@ -232,6 +232,7 @@ def run_forever(settings: Settings, state: StateStore) -> None:
                 settings.kubernetes_namespace,
                 settings.pipeline_name,
                 settings.pipeline_namespace,
+                max_completion_age_seconds=settings.max_completion_age_seconds,
             )
             if failed:
                 logger.info("Found %s failed PipelineRun(s) in %s", len(failed), settings.kubernetes_namespace)

@@ -41,6 +41,12 @@ class Settings(BaseSettings):
         validation_alias="FIXER_PIPELINE_NAMESPACE",
     )
     poll_interval_seconds: int = Field(120, validation_alias="FIXER_POLL_INTERVAL_SECONDS")
+    max_completion_age_seconds: int | None = Field(
+        None,
+        validation_alias="FIXER_MAX_COMPLETION_AGE_SECONDS",
+        description="If set, only failed PipelineRuns whose status.completionTime is at most this many "
+        "seconds in the past (UTC) are considered; older completions are ignored.",
+    )
     state_file_path: str = Field("/tmp/fixer-agent-state.json", validation_alias="FIXER_STATE_FILE")
 
     llama_stack_base_url: str = Field(..., validation_alias="LLAMA_STACK_BASE_URL")
@@ -102,3 +108,13 @@ class Settings(BaseSettings):
         if v < 1:
             raise ValueError("must be >= 1")
         return v
+
+    @field_validator("max_completion_age_seconds", mode="before")
+    @classmethod
+    def _max_completion_age_optional(cls, v: Any) -> int | None:
+        if v is None or v == "":
+            return None
+        i = int(v)
+        if i < 1:
+            raise ValueError("FIXER_MAX_COMPLETION_AGE_SECONDS must be >= 1 when set")
+        return i

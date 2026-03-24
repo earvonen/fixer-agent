@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 import yaml
@@ -84,6 +85,46 @@ def pipelinerun_matches_configured_pipeline(
     return True
 
 
+def _parse_k8s_timestamp(iso: str) -> datetime | None:
+    """Parse Kubernetes API RFC3339 timestamps to timezone-aware UTC."""
+    s = iso.strip()
+    if not s:
+        return None
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        logger.warning("Unparseable timestamp: %r", iso)
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def pipelinerun_completion_within_max_age(
+    pr: dict[str, Any],
+    max_age_seconds: int | None,
+) -> bool:
+    """
+    If max_age_seconds is set, require status.completionTime within the last max_age_seconds (UTC).
+    Runs without completionTime are excluded when the filter is active.
+    """
+    if max_age_seconds is None:
+        return True
+    raw = (pr.get("status") or {}).get("completionTime")
+    if not raw:
+        return False
+    completed = _parse_k8s_timestamp(str(raw))
+    if completed is None:
+        return False
+    now = datetime.now(timezone.utc)
+    age_sec = (now - completed).total_seconds()
+    if age_sec < 0:
+        return True
+    return age_sec <= max_age_seconds
+
+
 def _failure_message(obj: dict[str, Any]) -> str:
     status = obj.get("status") or {}
     conditions = status.get("conditions") or []
@@ -107,6 +148,7 @@ def list_failed_pipelineruns(
     namespace: str,
     pipeline_name: str,
     pipeline_namespace: str | None = None,
+    max_completion_age_seconds: int | None = None,
 ) -> list[dict[str, Any]]:
     load_kube_config()
     api = client.CustomObjectsApi()
@@ -131,7 +173,17 @@ def list_failed_pipelineruns(
             pipeline_namespace or "any",
             len(failed) - len(matched),
         )
-    return matched
+    windowed = [
+        item for item in matched if pipelinerun_completion_within_max_age(item, max_completion_age_seconds)
+    ]
+    if max_completion_age_seconds is not None and len(windowed) < len(matched):
+        logger.debug(
+            "Completion-time window (%ss): %s of %s failed runs still eligible",
+            max_completion_age_seconds,
+            len(windowed),
+            len(matched),
+        )
+    return windowed
 
 
 def _list_taskruns_for_pipelinerun(namespace: str, pr_name: str) -> list[dict[str, Any]]:

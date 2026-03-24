@@ -98,6 +98,7 @@ GitHub credentials are **not** required in the Deployment if the **GitHub MCP** 
 | `LLAMA_STACK_BASE_URL` | **Yes** | — | Base URL of Llama Stack (e.g. `http://llama-stack:8321`). |
 | `FIXER_TOOL_GROUP_IDS` | **Yes** | — | Comma-separated tool group IDs (e.g. `mcp::kubernetes,mcp::github`). |
 | `FIXER_POLL_INTERVAL_SECONDS` | No | `120` | Sleep between poll loops. |
+| `FIXER_MAX_COMPLETION_AGE_SECONDS` | No | — | If set, only failed runs with `status.completionTime` within this many seconds (UTC) are considered; older runs and runs without `completionTime` are skipped. |
 | `FIXER_STATE_FILE` | No | `/tmp/fixer-agent-state.json` | JSON file of processed PipelineRun UIDs. |
 | `FIXER_WORKSPACE_ROOT` | No | `/tmp/fixer-workspaces` | Parent directory for per-run clone directories. |
 | `LLAMA_STACK_MODEL_ID` | No | — | Model id; if unset, the **first** model from `GET /models` is used. |
