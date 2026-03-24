@@ -63,18 +63,21 @@ spec:
         app: fixer-agent
     spec:
       serviceAccountName: fixer-agent
-      securityContext:
-        fsGroup: 1000
-        runAsNonRoot: true
-        runAsUser: 1000
       containers:
         - name: fixer-agent
           image: image-registry.openshift-image-registry.svc:5000/fixer-agent/fixer-agent:latest
           imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           envFrom:
             - configMapRef:
                 name: fixer-agent-config
           env:
+            - name: HOME
+              value: /var/lib/fixer-agent
             # Optional: GITHUB_TOKEN only if you need HTTPS clone of private repos or REST PR fallback
             # - name: GITHUB_TOKEN
             #   valueFrom:

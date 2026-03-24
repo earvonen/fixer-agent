@@ -76,7 +76,9 @@ Default Git URL is [https://github.com/earvonen/fixer-agent.git](https://github.
 
 ## OpenShift deployment
 
-Example manifests: [`deploy/openshift.yaml`](deploy/openshift.yaml). Adjust:
+Example manifests: [`deploy/openshift.yaml`](deploy/openshift.yaml). The Deployment does **not** set `runAsUser` / `fsGroup` so **`restricted-v2`** can assign a UID from the namespace range (hardcoding UID `1000` is rejected on many clusters). The **Containerfile** uses `chgrp 0` + `chmod g=u` on `/app` so the process can run as that arbitrary UID with root group. **`HOME`** is set to the mounted data volume for git and caches.
+
+Adjust:
 
 - **Image** reference and **namespace** names.
 - **`FIXER_WATCH_NAMESPACE`** if pipelines run in another namespace than the Deployment (you may need a **Role + RoleBinding in that namespace** binding the same `ServiceAccount`).
