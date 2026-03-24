@@ -132,9 +132,9 @@ as **`FIXER_MCP_REGISTRATIONS_JSON`** (single-line string in Kubernetes `ConfigM
 | Param | Role |
 |-------|------|
 | `git-url` | Clone URL (`https://…`, `git@github.com:…`, etc.) |
-| `git-revision` | Branch or tag to check out after clone (optional but recommended) |
+| `git-revision` | Ref to check out **and** GitHub PR **merge base** (`base`) — same value, no extra Pipeline params. |
 
-If `git-url` is set, it takes precedence. Owner/repo for GitHub REST PRs are parsed from the URL (GitHub https / `git@github.com`, or the last two path segments for other hosts).
+If `git-url` is set, it takes precedence. Owner/repo for GitHub REST PRs are parsed from the URL (GitHub https / `git@github.com`, or the last two path segments for other hosts). If `git-revision` is missing when using params, the in-app PR path falls back to the clone’s default branch (`origin/HEAD` / `main`).
 
 **Fallback:** **Pipelines-as-Code** annotations (`url-org`, `url-repository`, `sha`, `source-branch`, `original-pr-url`) and any `https://github.com/org/repo` string in annotations.
 

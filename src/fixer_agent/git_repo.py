@@ -88,8 +88,8 @@ def discover_git_source(pipelinerun: dict[str, Any]) -> GitSource | None:
     """
     Resolve clone URL and revision from the PipelineRun.
 
-    Primary: ``spec.params`` entries ``git-url`` and ``git-revision`` (same names as the
-    fixer-agent-build Pipeline).
+    Primary: ``spec.params`` — ``git-url`` and ``git-revision``. The same ``git-revision`` value is used
+    to check out the repo and as the GitHub PR merge base (``base``).
 
     Fallback: Pipelines-as-Code annotations and GitHub URLs in annotations.
     """
@@ -248,7 +248,7 @@ def create_branch_commit_push_pr(
     import urllib.error
     import urllib.request
 
-    base = base_branch
+    base = (base_branch or "").strip() or None
     if not base:
         try:
             base = r.git.rev_parse("--abbrev-ref", "origin/HEAD").replace("origin/", "")

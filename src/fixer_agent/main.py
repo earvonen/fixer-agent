@@ -66,7 +66,14 @@ def _resolve_model_id(client: LlamaStackClient, configured: str | None) -> str:
     return mid
 
 
-def _build_user_prompt(ctx, git_summary: str, repo_path: Path, branch_hint: str) -> str:
+def _build_user_prompt(
+    ctx,
+    git_summary: str,
+    repo_path: Path,
+    branch_hint: str,
+    pr_merge_base_branch: str | None,
+) -> str:
+    pr_base = pr_merge_base_branch or "(PipelineRun spec.params git-revision)"
     logs_blob = "\n\n".join(ctx.pod_logs) if ctx.pod_logs else "(no pod logs collected)"
     tasks_blob = "\n\n".join(ctx.taskrun_summaries) if ctx.taskrun_summaries else "(no taskruns)"
     return f"""## PipelineRun
@@ -96,8 +103,10 @@ Recent commits:
 ```
 
 Use workspace_list_files then workspace_read_file / workspace_write_file to inspect and fix the project.
-When your changes are ready, use the GitHub MCP tools to open a pull request (suggested branch name:
-`{branch_hint}`). Then write a short summary of the root cause and the fix (include the PR link if you have it).
+When your changes are ready, use the GitHub MCP tools to open a pull request (suggested head branch name:
+`{branch_hint}`). The pull request **must** target merge base branch **`{pr_base}`** (the branch this
+PipelineRun built from; do not assume `main`).
+Then write a short summary of the root cause and the fix (include the PR link if you have it).
 """
 
 
@@ -147,7 +156,7 @@ def process_failed_run(
 
     summary = git_repo_summary(ws)
     branch_hint = f"{settings.pr_branch_prefix}/{ctx.pipelinerun_name}"[:250]
-    user_prompt = _build_user_prompt(ctx, summary, ws, branch_hint)
+    user_prompt = _build_user_prompt(ctx, summary, ws, branch_hint, src.default_branch_hint)
 
     logger.info(
         "Invoking Llama Stack (model=%s) for PipelineRun %s/%s",
