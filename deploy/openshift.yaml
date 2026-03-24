@@ -1,12 +1,6 @@
 # Example OpenShift manifests. Adjust namespaces, image, and secrets for your cluster.
 # If PipelineRuns live in a different namespace than the Deployment, add a Role + RoleBinding
 # in that namespace that references ServiceAccount fixer-agent from this namespace.
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: fixer-agent
----
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -17,7 +11,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: fixer-agent-tekton-read
-  namespace: fixer-agent
 rules:
   - apiGroups: ["tekton.dev"]
     resources: ["pipelineruns", "pipelineruns/status", "taskruns", "taskruns/status"]
@@ -30,7 +23,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: fixer-agent-tekton-read
-  namespace: fixer-agent
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -38,13 +30,11 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: fixer-agent
-    namespace: fixer-agent
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: fixer-agent-config
-  namespace: fixer-agent
 data:
   FIXER_WATCH_NAMESPACE: "agentic-demo"
   FIXER_PIPELINE_NAME: "redhat-screensaver-build"
@@ -63,7 +53,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: fixer-agent
-  namespace: fixer-agent
 spec:
   replicas: 1
   selector:
