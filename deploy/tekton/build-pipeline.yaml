@@ -17,7 +17,6 @@ apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
   name: fixer-agent-build
-  namespace: fixer-agent
   labels:
     app.kubernetes.io/name: fixer-agent
     app.kubernetes.io/component: ci
@@ -114,7 +113,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: pipeline-image-builder
-  namespace: fixer-agent
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

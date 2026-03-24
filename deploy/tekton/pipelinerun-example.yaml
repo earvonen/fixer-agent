@@ -5,7 +5,6 @@ apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   generateName: fixer-agent-build-
-  namespace: fixer-agent
   labels:
     app.kubernetes.io/name: fixer-agent
 spec:

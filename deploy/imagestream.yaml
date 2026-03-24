@@ -8,7 +8,6 @@ apiVersion: image.openshift.io/v1
 kind: ImageStream
 metadata:
   name: fixer-agent
-  namespace: fixer-agent
 spec:
   lookupPolicy:
     local: false
