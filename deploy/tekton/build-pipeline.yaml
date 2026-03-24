@@ -1,0 +1,125 @@
+# Tekton Pipeline: clone https://github.com/earvonen/fixer-agent.git, build Containerfile, push to ImageStream.
+#
+# Prerequisites:
+#   - OpenShift Pipelines (Tekton) with the Hub resolver enabled (see
+#     https://tekton.dev/docs/pipelines/hub-resolver/ ).
+#   - Namespace `fixer-agent` (or change metadata.namespace everywhere).
+#   - ImageStream `fixer-agent` in that namespace: oc apply -f deploy/imagestream.yaml
+#
+# Apply:
+#   oc apply -f deploy/imagestream.yaml
+#   oc apply -f deploy/tekton/build-pipeline.yaml
+#   oc create -f deploy/tekton/pipelinerun-example.yaml
+#
+# Hub tasks are resolved from Artifact Hub (catalog `tekton-catalog-tasks`, type `artifact`).
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: fixer-agent-build
+  namespace: fixer-agent
+  labels:
+    app.kubernetes.io/name: fixer-agent
+    app.kubernetes.io/component: ci
+spec:
+  description: >-
+    Clone fixer-agent from GitHub, build the image from Containerfile, and push to the
+    OpenShift internal registry (updates the fixer-agent ImageStream tag).
+  params:
+    - name: repo-url
+      type: string
+      default: "https://github.com/earvonen/fixer-agent.git"
+    - name: revision
+      type: string
+      default: main
+    - name: image-registry
+      type: string
+      default: image-registry.openshift-image-registry.svc:5000
+    - name: image-namespace
+      type: string
+      default: fixer-agent
+      description: Namespace where the ImageStream lives (registry path segment).
+    - name: image-name
+      type: string
+      default: fixer-agent
+    - name: image-tag
+      type: string
+      default: latest
+  workspaces:
+    - name: shared-workspace
+      description: Holds cloned source and build context.
+  tasks:
+    - name: fetch-repository
+      taskRef:
+        resolver: hub
+        params:
+          - name: catalog
+            value: tekton-catalog-tasks
+          - name: type
+            value: artifact
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: version
+            value: "0.9"
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: url
+          value: $(params.repo-url)
+        - name: revision
+          value: $(params.revision)
+        - name: depth
+          value: "1"
+        - name: sslVerify
+          value: "true"
+        - name: deleteExisting
+          value: "true"
+
+    - name: build-and-push
+      runAfter:
+        - fetch-repository
+      taskRef:
+        resolver: hub
+        params:
+          - name: catalog
+            value: tekton-catalog-tasks
+          - name: type
+            value: artifact
+          - name: kind
+            value: task
+          - name: name
+            value: buildah
+          - name: version
+            value: "0.6"
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: IMAGE
+          value: $(params.image-registry)/$(params.image-namespace)/$(params.image-name):$(params.image-tag)
+        - name: DOCKERFILE
+          value: Containerfile
+        - name: CONTEXT
+          value: .
+        - name: TLSVERIFY
+          value: "true"
+        - name: FORMAT
+          value: oci
+---
+# Allow the default Pipelines ServiceAccount to push images to ImageStreams in this namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pipeline-image-builder
+  namespace: fixer-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:image-builder
+subjects:
+  - kind: ServiceAccount
+    name: pipeline
+    namespace: fixer-agent

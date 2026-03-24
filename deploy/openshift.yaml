@@ -1,0 +1,114 @@
+# Example OpenShift manifests. Adjust namespaces, image, and secrets for your cluster.
+# If PipelineRuns live in a different namespace than the Deployment, add a Role + RoleBinding
+# in that namespace that references ServiceAccount fixer-agent from this namespace.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fixer-agent
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: fixer-agent
+  namespace: fixer-agent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: fixer-agent-tekton-read
+  namespace: fixer-agent
+rules:
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelineruns", "pipelineruns/status", "taskruns", "taskruns/status"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fixer-agent-tekton-read
+  namespace: fixer-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: fixer-agent-tekton-read
+subjects:
+  - kind: ServiceAccount
+    name: fixer-agent
+    namespace: fixer-agent
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fixer-agent-config
+  namespace: fixer-agent
+data:
+  FIXER_WATCH_NAMESPACE: "agentic-demo"
+  FIXER_PIPELINE_NAME: "redhat-screensaver-build"
+  # Optional: require Pipeline CR in this namespace (defaults to pipelineRef.namespace or PipelineRun ns)
+  # FIXER_PIPELINE_NAMESPACE: "shared-tekton"
+  FIXER_POLL_INTERVAL_SECONDS: "120"
+  FIXER_STATE_FILE: "/var/lib/fixer-agent/state.json"
+  FIXER_WORKSPACE_ROOT: "/var/lib/fixer-agent/workspaces"
+  LLAMA_STACK_BASE_URL: "http://llamastack-service:8321"
+  # GitHub auth/PAT lives on the GitHub MCP server registered with Llama Stack, not in this pod.
+  FIXER_TOOL_GROUP_IDS: "mcp-kubernetes,mcp-github"
+  # Optional: register MCP SSE endpoints at startup (JSON array)
+  # FIXER_MCP_REGISTRATIONS_JSON: '[{"toolgroup_id":"mcp::github","mcp_uri":"http://github-mcp:8080/sse"}]'
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fixer-agent
+  namespace: fixer-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fixer-agent
+  template:
+    metadata:
+      labels:
+        app: fixer-agent
+    spec:
+      serviceAccountName: fixer-agent
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: fixer-agent
+          image: image-registry.openshift-image-registry.svc:5000/fixer-agent/fixer-agent:latest
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: fixer-agent-config
+          env:
+            # Optional: GITHUB_TOKEN only if you need HTTPS clone of private repos or REST PR fallback
+            # - name: GITHUB_TOKEN
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: fixer-agent-github
+            #       key: token
+            # - name: LLAMA_STACK_API_KEY
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: llama-stack-credentials
+            #       key: api-key
+            # - name: LLAMA_STACK_MODEL_ID
+            #   value: "your-registered-model-id"
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/fixer-agent
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 256Mi
+            limits:
+              memory: 2Gi
+      volumes:
+        - name: data
+          emptyDir: {}
