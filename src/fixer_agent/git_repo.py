@@ -7,6 +7,7 @@ import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from git import Repo
 
@@ -16,15 +17,57 @@ _GITHUB_HTTPS = re.compile(
     r"https?://(?:[^@]+@)?github\.com/([^/]+)/([^/.]+)(?:\.git)?",
     re.I,
 )
+_GITHUB_SSH = re.compile(
+    r"git@github\.com:([^/]+)/([^/.]+)(?:\.git)?\s*$",
+    re.I,
+)
 
 
 @dataclass(frozen=True)
 class GitSource:
     owner: str
     repo: str
-    clone_url_https: str
+    clone_url: str
     revision: str | None
     default_branch_hint: str | None
+
+
+def _spec_param(pr: dict[str, Any], key: str) -> str | None:
+    """Read a string value from PipelineRun spec.params by name."""
+    spec = pr.get("spec") or {}
+    for p in spec.get("params") or []:
+        if not isinstance(p, dict) or p.get("name") != key:
+            continue
+        v = p.get("value")
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s if s else None
+        return str(v).strip() or None
+    return None
+
+
+def _owner_repo_from_clone_url(clone_url: str) -> tuple[str, str] | None:
+    """Best-effort owner/repo for GitHub PRs and logging; supports https and git@ GitHub, else URL path tail."""
+    u = clone_url.strip()
+    m = _GITHUB_HTTPS.search(u)
+    if m:
+        return m.group(1), m.group(2)
+    m = _GITHUB_SSH.match(u)
+    if m:
+        return m.group(1), m.group(2)
+    if u.startswith("git@"):
+        tail = u.split(":", 1)[-1]
+        parts = tail.replace(".git", "").strip("/").split("/")
+        if len(parts) >= 2:
+            return parts[-2], parts[-1]
+        return None
+    path = urlparse(u).path.strip("/")
+    parts = [x for x in path.split("/") if x]
+    if len(parts) >= 2:
+        return parts[-2], parts[-1].removesuffix(".git")
+    return None
 
 
 def _annotation(pr: dict[str, Any], key: str) -> str | None:
@@ -43,11 +86,29 @@ def _first_github_url(text: str | None) -> str | None:
 
 def discover_git_source(pipelinerun: dict[str, Any]) -> GitSource | None:
     """
-    Resolve GitHub coordinates from PipelineRun metadata.
+    Resolve clone URL and revision from the PipelineRun.
 
-    Primary: Pipelines-as-Code annotations.
-    Fallback: any https://github.com/org/repo URL in annotations.
+    Primary: ``spec.params`` entries ``git-url`` and ``git-revision`` (same names as the
+    fixer-agent-build Pipeline).
+
+    Fallback: Pipelines-as-Code annotations and GitHub URLs in annotations.
     """
+    git_url = _spec_param(pipelinerun, "git-url")
+    git_revision = _spec_param(pipelinerun, "git-revision")
+    if git_url:
+        parsed = _owner_repo_from_clone_url(git_url)
+        if not parsed:
+            logger.warning("Could not parse owner/repo from git-url param: %s", git_url)
+            return None
+        owner, repo = parsed
+        return GitSource(
+            owner=owner,
+            repo=repo,
+            clone_url=git_url,
+            revision=git_revision,
+            default_branch_hint=git_revision,
+        )
+
     org = _annotation(pipelinerun, "pipelinesascode.tekton.dev/url-org")
     repo = _annotation(pipelinerun, "pipelinesascode.tekton.dev/url-repository")
     sha = _annotation(pipelinerun, "pipelinesascode.tekton.dev/sha")
@@ -59,7 +120,7 @@ def discover_git_source(pipelinerun: dict[str, Any]) -> GitSource | None:
         return GitSource(
             owner=org,
             repo=repo,
-            clone_url_https=clone_url,
+            clone_url=clone_url,
             revision=sha or branch,
             default_branch_hint=branch,
         )
@@ -77,7 +138,7 @@ def discover_git_source(pipelinerun: dict[str, Any]) -> GitSource | None:
                 return GitSource(
                     owner=o,
                     repo=r,
-                    clone_url_https=f"https://github.com/{o}/{r}.git",
+                    clone_url=f"https://github.com/{o}/{r}.git",
                     revision=sha,
                     default_branch_hint=branch,
                 )
@@ -90,7 +151,7 @@ def discover_git_source(pipelinerun: dict[str, Any]) -> GitSource | None:
             return GitSource(
                 owner=o,
                 repo=r,
-                clone_url_https=f"https://github.com/{o}/{r}.git",
+                clone_url=f"https://github.com/{o}/{r}.git",
                 revision=sha,
                 default_branch_hint=branch,
             )
@@ -119,8 +180,8 @@ def clone_repository(
     if dest.exists() and any(dest.iterdir()):
         raise FileExistsError(f"Workspace not empty: {dest}")
 
-    url = _authenticated_clone_url(source.clone_url_https, token)
-    logger.info("Cloning %s into %s", source.clone_url_https, dest)
+    url = _authenticated_clone_url(source.clone_url, token)
+    logger.info("Cloning %s into %s", source.clone_url, dest)
     repo = Repo.clone_from(url, dest, depth=depth, multi_options=[f"--depth={depth}"])
 
     if source.revision:

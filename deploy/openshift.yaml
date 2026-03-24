@@ -65,7 +65,7 @@ spec:
       serviceAccountName: fixer-agent
       containers:
         - name: fixer-agent
-          image: image-registry.openshift-image-registry.svc:5000/fixer-agent/fixer-agent:latest
+          image: image-registry.openshift-image-registry.svc:5000/agentic-demo/fixer-agent:latest
           imagePullPolicy: Always
           securityContext:
             allowPrivilegeEscalation: false

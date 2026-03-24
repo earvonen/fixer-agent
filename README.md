@@ -6,7 +6,7 @@ Python service for **OpenShift** that watches **Tekton** `PipelineRun` objects, 
 
 1. Polls the Kubernetes API for **failed** `PipelineRun`s (`tekton.dev/v1`, condition `Succeeded=False`) in a configured namespace **that reference a specific Tekton `Pipeline`** (`spec.pipelineRef.name` must equal `FIXER_PIPELINE_NAME`; optional namespace constraint via `FIXER_PIPELINE_NAMESPACE`).
 2. Loads related **TaskRuns** and **pod logs** for failing work.
-3. Resolves **GitHub** coordinates from [Pipelines-as-Code](https://pipelinesascode.com/) annotations (see below) or other `github.com` URLs on the object.
+3. Resolves the Git clone URL from **`spec.params`** (`git-url`, `git-revision`) when present, else from [Pipelines-as-Code](https://pipelinesascode.com/) annotations or `github.com` URLs on the object (see below).
 4. **Clones** the repo into a workspace (unauthenticated HTTPS when `GITHUB_TOKEN` is unset — suitable for **public** repos).
 5. Calls **Llama Stack** (`chat.completions` + `tool_runtime`) with:
    - MCP tools from the tool groups you configure (`list_tools` / `invoke_tool`).
@@ -126,15 +126,18 @@ as **`FIXER_MCP_REGISTRATIONS_JSON`** (single-line string in Kubernetes `ConfigM
 
 ## PipelineRun → repository mapping
 
-Primary source: **Pipelines-as-Code** annotations:
+**Primary:** `spec.params` on the `PipelineRun` (same parameter names as **`fixer-agent-build`**):
 
-- `pipelinesascode.tekton.dev/url-org`
-- `pipelinesascode.tekton.dev/url-repository`
-- `pipelinesascode.tekton.dev/sha` / `source-branch` (checkout hints)
+| Param | Role |
+|-------|------|
+| `git-url` | Clone URL (`https://…`, `git@github.com:…`, etc.) |
+| `git-revision` | Branch or tag to check out after clone (optional but recommended) |
 
-Fallback: any `https://github.com/org/repo` string found in annotations (e.g. `original-pr-url`).
+If `git-url` is set, it takes precedence. Owner/repo for GitHub REST PRs are parsed from the URL (GitHub https / `git@github.com`, or the last two path segments for other hosts).
 
-If no GitHub coordinates are found, the run is skipped and recorded in state with `reason: no_git_metadata`.
+**Fallback:** **Pipelines-as-Code** annotations (`url-org`, `url-repository`, `sha`, `source-branch`, `original-pr-url`) and any `https://github.com/org/repo` string in annotations.
+
+If nothing resolves, the run is skipped and recorded in state with `reason: no_git_metadata`.
 
 ## GitHub: MCP vs `GITHUB_TOKEN`
 
