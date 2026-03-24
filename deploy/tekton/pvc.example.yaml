@@ -1,0 +1,14 @@
+# Example PVC for PipelineRun workspace — clone this repository into the volume
+# (e.g. a Job or manual pod) before starting the PipelineRun, or mount and sync CI artifacts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fixer-agent-source-pvc
+  labels:
+    app: fixer-agent
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

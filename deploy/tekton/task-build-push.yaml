@@ -1,0 +1,67 @@
+# Build and push using Kaniko (no privileged container). Push auth for the OpenShift
+# internal registry is built from the Task pod's ServiceAccount token (no dockerconfig Secret).
+# Grant the PipelineRun ServiceAccount system:image-pusher in the namespace.
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: fixer-agent-build-push
+  labels:
+    app: fixer-agent
+spec:
+  description: Build image with Kaniko and push to registry (non-privileged)
+  workspaces:
+    - name: source
+      description: Repository root containing Containerfile
+  params:
+    - name: IMAGE
+      type: string
+      description: Full image reference (registry/namespace/name:tag)
+    - name: CONTAINERFILE
+      type: string
+      default: Containerfile
+    - name: registry-host
+      type: string
+      description: >
+        Host:port for Docker auth (must match the registry in IMAGE). Used as the key in config.json auths.
+      default: image-registry.openshift-image-registry.svc:5000
+  volumes:
+    - name: kaniko-docker-config
+      emptyDir: {}
+  steps:
+    - name: prepare-registry-auth
+      image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+      securityContext:
+        allowPrivilegeEscalation: false
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        TOKEN_FILE=/var/run/secrets/kubernetes.io/serviceaccount/token
+        if [ ! -r "$TOKEN_FILE" ]; then
+          echo "ServiceAccount token not mounted (check automountServiceAccountToken on the Task pod)."
+          exit 1
+        fi
+        TOKEN=$(tr -d '\n\r' < "$TOKEN_FILE")
+        REG="$(params.registry-host)"
+        # OpenShift internal registry accepts arbitrary non-empty user + SA token as password.
+        AUTH=$(printf 'openshift:%s' "$TOKEN" | base64 -w0)
+        mkdir -p /tmp/kaniko-docker
+        printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$REG" "$AUTH" > /tmp/kaniko-docker/config.json
+      volumeMounts:
+        - name: kaniko-docker-config
+          mountPath: /tmp/kaniko-docker
+    - name: build-and-push
+      image: gcr.io/kaniko-project/executor:v1.23.2
+      securityContext:
+        allowPrivilegeEscalation: false
+      env:
+        - name: DOCKER_CONFIG
+          value: /tmp/kaniko-docker
+      args:
+        - --dockerfile=$(params.CONTAINERFILE)
+        - --context=dir://$(workspaces.source.path)
+        - --destination=$(params.IMAGE)
+        - --skip-tls-verify
+      volumeMounts:
+        - name: kaniko-docker-config
+          mountPath: /tmp/kaniko-docker
+          readOnly: true

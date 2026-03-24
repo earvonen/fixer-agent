@@ -1,0 +1,35 @@
+# Clone the fixer-agent repository into the output workspace (repository root = workspace root).
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: fixer-agent-git-clone
+  labels:
+    app: fixer-agent
+spec:
+  description: Shallow clone of fixer-agent from GitHub
+  workspaces:
+    - name: output
+      description: >
+        Clone lands at workspace root. Existing entries (e.g. from a previous run on the same PVC) are removed first.
+  params:
+    - name: url
+      type: string
+      description: Git remote URL
+      default: https://github.com/earvonen/fixer-agent.git
+    - name: revision
+      type: string
+      description: Branch or tag to checkout
+      default: main
+  steps:
+    - name: clone
+      image: docker.io/alpine/git:v2.47.1
+      securityContext:
+        allowPrivilegeEscalation: false
+      script: |
+        #!/bin/sh
+        set -eu
+        ROOT="$(workspaces.output.path)"
+        cd "$ROOT"
+        # Same PVC on a later PipelineRun still has the old tree; git clone … . requires an empty dir.
+        find . -mindepth 1 -maxdepth 1 -exec rm -rf {} \;
+        git clone --depth 1 --branch "$(params.revision)" "$(params.url)" .

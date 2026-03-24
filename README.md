@@ -50,19 +50,29 @@ The image installs `git` (required for clone and local repo operations).
 
 ### Build on OpenShift with Tekton (ImageStream + Pipeline)
 
-Manifests under [`deploy/`](deploy/):
+Same layout as the `tekton/` folder in **redhat-screensaver**: local **Tasks** (Alpine **git** clone + **Kaniko** build/push, non-privileged), one **Pipeline**, and examples. No Tekton Hub resolver required.
 
-1. **[`deploy/imagestream.yaml`](deploy/imagestream.yaml)** — `ImageStream` `fixer-agent` in namespace `fixer-agent`.
-2. **[`deploy/tekton/build-pipeline.yaml`](deploy/tekton/build-pipeline.yaml)** — `Pipeline` **fixer-agent-build** that resolves [git-clone](https://artifacthub.io/packages/tekton-task/tekton-tasks/git-clone) and [buildah](https://artifacthub.io/packages/tekton-task/tekton-tasks/buildah) from the [Tekton Hub resolver](https://tekton.dev/docs/pipelines/hub-resolver/) (`tekton-catalog-tasks` / `artifact`), clones [https://github.com/earvonen/fixer-agent.git](https://github.com/earvonen/fixer-agent.git), builds `Containerfile`, and pushes to `image-registry.openshift-image-registry.svc:5000/<namespace>/fixer-agent:<tag>`. Includes a **RoleBinding** so the `pipeline` **ServiceAccount** can push (`system:image-builder`).
-3. **[`deploy/tekton/pipelinerun-example.yaml`](deploy/tekton/pipelinerun-example.yaml)** — example `PipelineRun` with a workspace PVC.
+| File | Purpose |
+|------|---------|
+| [`deploy/imagestream.yaml`](deploy/imagestream.yaml) | `ImageStream` `fixer-agent` |
+| [`deploy/tekton/task-git-clone.yaml`](deploy/tekton/task-git-clone.yaml) | Task `fixer-agent-git-clone` |
+| [`deploy/tekton/task-build-push.yaml`](deploy/tekton/task-build-push.yaml) | Task `fixer-agent-build-push` (Kaniko + SA token auth) |
+| [`deploy/tekton/pipeline.yaml`](deploy/tekton/pipeline.yaml) | Pipeline `fixer-agent-build` |
+| [`deploy/tekton/pipelinerun.example.yaml`](deploy/tekton/pipelinerun.example.yaml) | Example `PipelineRun` (`emptyDir` workspace) |
+| [`deploy/tekton/pvc.example.yaml`](deploy/tekton/pvc.example.yaml) | Optional PVC for a persistent workspace |
 
 ```bash
 oc apply -f deploy/imagestream.yaml
-oc apply -f deploy/tekton/build-pipeline.yaml
-oc create -f deploy/tekton/pipelinerun-example.yaml
+oc apply -f deploy/tekton/task-git-clone.yaml
+oc apply -f deploy/tekton/task-build-push.yaml
+oc apply -f deploy/tekton/pipeline.yaml
+oc create -f deploy/tekton/pipelinerun.example.yaml
 ```
 
-Edit namespaces, `revision` (branch/tag), storage class, and Hub task **versions** in the Pipeline if your cluster resolves different catalog versions. If Hub resolution fails, confirm the hub resolver is enabled in your OpenShift Pipelines / Tekton configuration.
+Grant the **`pipeline`** ServiceAccount permission to push (same as screensaver), e.g.  
+`oc policy add-role-to-user system:image-pusher system:serviceaccount:YOUR_NS:pipeline -n YOUR_NS`
+
+Default Git URL is [https://github.com/earvonen/fixer-agent.git](https://github.com/earvonen/fixer-agent.git); override with Pipeline / PipelineRun params `git-url` and `git-revision`. Image push target uses `$(context.pipelineRun.namespace)` for the registry path segment (requires a recent Tekton version).
 
 ## OpenShift deployment
 

@@ -1,13 +1,13 @@
-# OpenShift ImageStream for the fixer-agent container image.
-# Namespace must exist first (e.g. oc apply -f deploy/openshift.yaml, or oc new-project fixer-agent).
-# After a successful Tekton Pipeline push, status will show tags (e.g. latest).
-# Reference in Deployment: image: image-registry.openshift-image-registry.svc:5000/<namespace>/fixer-agent:latest
-# Or use an OpenShift image change trigger on the Deployment.
----
+# ImageStream for the fixer-agent container image.
+# After a successful push from Tekton to
+# image-registry.openshift-image-registry.svc:5000/<namespace>/fixer-agent:<tag>,
+# OpenShift will record tags here (local lookup policy optional).
 apiVersion: image.openshift.io/v1
 kind: ImageStream
 metadata:
   name: fixer-agent
+  labels:
+    app: fixer-agent
 spec:
   lookupPolicy:
-    local: false
+    local: true

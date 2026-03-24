@@ -1,0 +1,60 @@
+# Pipeline: build container image from source workspace and push to the OpenShift internal registry
+# targeting the fixer-agent ImageStream (same name:tag as metadata.name + spec tag).
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: fixer-agent-build
+  labels:
+    app: fixer-agent
+spec:
+  description: Build and push fixer-agent image to ImageStream
+  params:
+    - name: image-registry
+      type: string
+      description: Registry host (OpenShift internal)
+      default: image-registry.openshift-image-registry.svc:5000
+    - name: image-name
+      type: string
+      default: fixer-agent
+    - name: image-tag
+      type: string
+      default: latest
+    - name: containerfile
+      type: string
+      default: Containerfile
+    - name: git-url
+      type: string
+      default: https://github.com/earvonen/fixer-agent.git
+    - name: git-revision
+      type: string
+      default: main
+  workspaces:
+    - name: shared-workspace
+      description: Populated by git-clone, then consumed by Kaniko build
+  tasks:
+    - name: fetch-source
+      taskRef:
+        name: fixer-agent-git-clone
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.git-revision)
+    - name: build-and-push
+      runAfter:
+        - fetch-source
+      taskRef:
+        name: fixer-agent-build-push
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: IMAGE
+          value: $(params.image-registry)/$(context.pipelineRun.namespace)/$(params.image-name):$(params.image-tag)
+        - name: CONTAINERFILE
+          value: $(params.containerfile)
+        - name: registry-host
+          value: $(params.image-registry)
